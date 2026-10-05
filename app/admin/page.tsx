@@ -214,7 +214,7 @@ export default function AdminPage() {
             }
 
             setAdminPickParticipants(
-                (adminTurnData as AdminPickParticipant[]) ?? []
+                (adminTurnData as unknown as AdminPickParticipant[]) ?? []
             );
 
             const {
@@ -265,7 +265,7 @@ export default function AdminPage() {
                 throw new Error(turnError.message);
             }
 
-            setTurns((turnData as Turn[]) ?? []);
+            setTurns((turnData as unknown as Turn[]) ?? []);
 
             const { data: pickData, error: pickError } = await supabase
                 .from("picks")
@@ -287,7 +287,7 @@ export default function AdminPage() {
                 throw new Error(pickError.message);
             }
 
-            setLockedPicks((pickData as LockedPick[]) ?? []);
+            setLockedPicks((pickData as unknown as LockedPick[]) ?? []);
         } catch (err) {
             setError(
                 err instanceof Error
@@ -751,7 +751,7 @@ export default function AdminPage() {
                 await supabase
                     .from("games")
                     .select("id, away_team, home_team, league, external_id, game_time")
-                    .eq("week_id", weekData.id)
+                    .eq("week_id", week.id)
                     .order("game_time", { ascending: true });
 
             if (importedGameError) {

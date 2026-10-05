@@ -97,13 +97,16 @@ export default function Home() {
                 .eq("is_active", true)
                 .single();
 
+            if (weekError || !week) {
+                throw new Error(
+                    weekError?.message ?? "No active week found."
+                );
+            }
+
             setWeekId(week.id);
             setWeekNumber(week.week_number);
             setRevealPickNames(Boolean(week.reveal_pick_names));
 
-            if (weekError) {
-                throw new Error(`Week error: ${weekError.message}`);
-            }
 
             if (!week) {
                 throw new Error("Week{weekNumber} was not returned.");
@@ -166,7 +169,7 @@ export default function Home() {
 
             setGames((gamesData as Game[]) ?? []);
             setPicks((picksData as Pick[]) ?? []);
-            setTurns((turnsData as Turn[]) ?? []);
+            setTurns((turnsData as unknown as Turn[]) ?? []);
         } catch (err) {
             console.error("LOAD DRAFT ERROR:", err);
 
