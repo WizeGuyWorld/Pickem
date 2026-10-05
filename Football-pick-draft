@@ -1,0 +1,5 @@
+cd C:\Users\ludas\football-pick-draft
+git status
+git add .
+git commit -m "Prepare app for production"
+git push
