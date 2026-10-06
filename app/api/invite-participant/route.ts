@@ -87,8 +87,7 @@ export async function POST(request: NextRequest) {
                         participant_id: participant.id,
                         participant_name: participant.name,
                     },
-                    redirectTo:
-                        "http://localhost:3000/set-password",
+                    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/set-password`,
                 }
             );
 
