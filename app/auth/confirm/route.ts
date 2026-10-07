@@ -1,22 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export async function GET(request: NextRequest) {
-  const url = new URL(request.url);
+  const requestUrl = new URL(request.url);
 
-  const tokenHash = url.searchParams.get("token_hash");
-  const type = url.searchParams.get("type");
+  const tokenHash = requestUrl.searchParams.get("token_hash");
+  const type = requestUrl.searchParams.get("type");
 
   if (!tokenHash || type !== "invite") {
     return NextResponse.redirect(
-      new URL("/login", request.url)
+      new URL("/login?error=invalid_invite", request.url)
     );
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabase = await createSupabaseServerClient();
 
   const { error } = await supabase.auth.verifyOtp({
     token_hash: tokenHash,
