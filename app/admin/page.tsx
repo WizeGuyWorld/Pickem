@@ -130,6 +130,13 @@ export default function AdminPage() {
     const [adminPickParticipantId, setAdminPickParticipantId] = useState("");
     const [adminPickSelectionId, setAdminPickSelectionId] = useState("");
     const [adminPickSubmitting, setAdminPickSubmitting] = useState(false);
+    const [adminWeekId, setAdminWeekId] = useState<number | null>(null);
+    const selectedAdminWeek =
+        weeks.find((item) => item.id === adminWeekId) ?? week;
+
+    const onClock = turns.find(
+        (turn) => turn.status === "on_clock"
+    );
 
     const filteredOddsGames = oddsGames.filter((game) => {
         const leagueMatches =
@@ -142,6 +149,7 @@ export default function AdminPage() {
                 .toISOString()
                 .startsWith(oddsDateFilter);
 
+
         return leagueMatches && dateMatches;
     });
 
@@ -149,7 +157,7 @@ export default function AdminPage() {
         loadAdmin();
     }, []);
 
-    async function loadAdmin() {
+    async function loadAdmin(selectedWeekId?: number) {
         setLoading(true);
         setError("");
 
@@ -161,61 +169,127 @@ export default function AdminPage() {
 
             if (userError || !user) {
                 setAuthorized(false);
-                setLoading(false);
                 router.replace("/login");
                 return;
             }
 
-            const { data: adminParticipant, error: adminError } = await supabase
-                .from("participants")
-                .select("id, name, is_admin")
-                .eq("auth_user_id", user.id)
-                .single();
+            const { data: adminParticipant, error: adminError } =
+                await supabase
+                    .from("participants")
+                    .select("id, name, is_admin")
+                    .eq("auth_user_id", user.id)
+                    .single();
 
             if (adminError || !adminParticipant?.is_admin) {
                 setAuthorized(false);
-                setLoading(false);
                 router.replace("/");
                 return;
             }
 
             setAuthorized(true);
 
-            const { data: weekData, error: weekError } = await supabase
-                .from("weeks")
-                .select("id, week_number, status, reveal_pick_names, is_active")
-                .eq("is_active", true)
-                .single();
+            // -----------------------------------------
+            // LOAD THE PUBLIC / LIVE WEEK
+            // -----------------------------------------
+
+            const { data: weekData, error: weekError } =
+                await supabase
+                    .from("weeks")
+                    .select(
+                        "id, week_number, status, reveal_pick_names, is_active"
+                    )
+                    .eq("is_active", true)
+                    .single();
 
             if (weekError || !weekData) {
                 throw new Error(
-                    weekError?.message ?? "Active week could not be loaded."
+                    weekError?.message ??
+                    "Active week could not be loaded."
                 );
             }
 
+            // Keep this as the actual public/live week
             setWeek(weekData as Week);
 
-            const { data: adminTurnData, error: adminTurnError } =
+            // -----------------------------------------
+            // LOAD ALL WEEKS
+            // -----------------------------------------
+
+            const { data: weeksData, error: weeksError } =
                 await supabase
-                    .from("draft_turns")
-                    .select(`
-      participant_id,
-      turn_number,
-      status,
-      participants (
-        name
-      )
-    `)
-                    .eq("week_id", weekData.id)
-                    .order("turn_number");
+                    .from("weeks")
+                    .select(
+                        "id, week_number, status, is_active"
+                    )
+                    .order("week_number");
+
+            if (weeksError) {
+                throw new Error(weeksError.message);
+            }
+
+            const loadedWeeks =
+                (weeksData as WeekOption[]) ?? [];
+
+            setWeeks(loadedWeeks);
+
+            // -----------------------------------------
+            // DECIDE WHICH WEEK ADMIN IS EDITING
+            // -----------------------------------------
+
+            const effectiveAdminWeekId =
+                selectedWeekId ??
+                adminWeekId ??
+                weekData.id;
+
+            const adminWeek =
+                loadedWeeks.find(
+                    (item) =>
+                        item.id === effectiveAdminWeekId
+                ) ??
+                loadedWeeks.find(
+                    (item) => item.id === weekData.id
+                );
+
+            if (!adminWeek) {
+                throw new Error(
+                    "Admin week could not be loaded."
+                );
+            }
+
+            setAdminWeekId(adminWeek.id);
+
+            // -----------------------------------------
+            // ADMIN PICK PARTICIPANTS
+            // -----------------------------------------
+
+            const {
+                data: adminTurnData,
+                error: adminTurnError,
+            } = await supabase
+                .from("draft_turns")
+                .select(`
+                participant_id,
+                turn_number,
+                status,
+                participants (
+                    name
+                )
+            `)
+                .eq("week_id", adminWeek.id)
+                .order("turn_number");
 
             if (adminTurnError) {
                 throw new Error(adminTurnError.message);
             }
 
             setAdminPickParticipants(
-                (adminTurnData as unknown as AdminPickParticipant[]) ?? []
+                (adminTurnData as unknown as AdminPickParticipant[]) ??
+                []
             );
+
+            // -----------------------------------------
+            // AVAILABLE SELECTIONS FOR ADMIN PICK ENTRY
+            // -----------------------------------------
 
             const {
                 data: availableSelectionData,
@@ -223,71 +297,100 @@ export default function AdminPage() {
             } = await supabase.rpc(
                 "admin_get_available_selections",
                 {
-                    p_week_id: weekData.id,
+                    p_week_id: adminWeek.id,
                 }
             );
 
             if (availableSelectionError) {
-                throw new Error(availableSelectionError.message);
+                throw new Error(
+                    availableSelectionError.message
+                );
             }
 
             setAdminPickSelections(
-                (availableSelectionData as AdminPickSelection[]) ?? []
+                (availableSelectionData as AdminPickSelection[]) ??
+                []
             );
 
-            const { data: weeksData, error: weeksError } = await supabase
-                .from("weeks")
-                .select("id, week_number, status, is_active")
-                .order("week_number");
+            // -----------------------------------------
+            // DRAFT TURNS FOR SELECTED ADMIN WEEK
+            // -----------------------------------------
 
-            if (weeksError) {
-                throw new Error(weeksError.message);
-            }
-
-            setWeeks((weeksData as WeekOption[]) ?? []);
-
-            const { data: turnData, error: turnError } = await supabase
-                .from("draft_turns")
-                .select(`
-        participant_id,
-        turn_number,
-        status,
-        started_at,
-        expires_at,
-        participants (
-          name
-        )
-      `)
-                .eq("week_id", weekData.id)
-                .order("turn_number");
+            const { data: turnData, error: turnError } =
+                await supabase
+                    .from("draft_turns")
+                    .select(`
+                    participant_id,
+                    turn_number,
+                    status,
+                    started_at,
+                    expires_at,
+                    participants (
+                        name
+                    )
+                `)
+                    .eq("week_id", adminWeek.id)
+                    .order("turn_number");
 
             if (turnError) {
                 throw new Error(turnError.message);
             }
 
-            setTurns((turnData as unknown as Turn[]) ?? []);
+            setTurns(
+                (turnData as unknown as Turn[]) ?? []
+            );
 
-            const { data: pickData, error: pickError } = await supabase
-                .from("picks")
-                .select(`
-        id,
-        participant_id,
-        pick_status,
-        participants (
-          name
-        ),
-        selections (
-          display_name
-        )
-      `)
-                .eq("week_id", weekData.id)
-                .order("id");
+            // -----------------------------------------
+            // PICKS FOR SELECTED ADMIN WEEK
+            // -----------------------------------------
+
+            const { data: pickData, error: pickError } =
+                await supabase
+                    .from("picks")
+                    .select(`
+                    id,
+                    participant_id,
+                    pick_status,
+                    participants (
+                        name
+                    ),
+                    selections (
+                        display_name
+                    )
+                `)
+                    .eq("week_id", adminWeek.id)
+                    .order("id");
 
             if (pickError) {
                 throw new Error(pickError.message);
             }
 
-            setLockedPicks((pickData as unknown as LockedPick[]) ?? []);
+            setLockedPicks(
+                (pickData as unknown as LockedPick[]) ?? []
+            );
+
+            // -----------------------------------------
+            // PARTICIPANT INVITES
+            // -----------------------------------------
+
+            const {
+                data: inviteData,
+                error: inviteError,
+            } = await supabase
+                .from("participants")
+                .select(
+                    "id, name, email, auth_user_id, is_admin"
+                )
+                .eq("active", true)
+                .order("draft_position");
+
+            if (inviteError) {
+                throw new Error(inviteError.message);
+            }
+
+            setInviteParticipants(
+                (inviteData as InviteParticipant[]) ?? []
+            );
         } catch (err) {
             setError(
                 err instanceof Error
@@ -297,25 +400,7 @@ export default function AdminPage() {
         } finally {
             setLoading(false);
         }
-        const { data: inviteData, error: inviteError } =
-  await supabase
-    .from("participants")
-    .select(
-      "id, name, email, auth_user_id, is_admin"
-    )
-    .eq("active", true)
-    .order("draft_position");
-
-        if (inviteError) {
-            throw new Error(inviteError.message);
-        }
-
-        setInviteParticipants((inviteData as InviteParticipant[]) ?? []);
     }
-
-    const onClock = turns.find(
-        (turn) => turn.status === "on_clock"
-    );
 
     async function startDraft() {
         if (!week) return;
@@ -428,7 +513,14 @@ export default function AdminPage() {
     }
 
     async function addGame() {
-        if (!awayTeam || !homeTeam || !awaySpread || !homeSpread || !week || !total) {
+        if (
+            !awayTeam ||
+            !homeTeam ||
+            !awaySpread ||
+            !homeSpread ||
+            !selectedAdminWeek ||
+            !total
+        ) {
             setError("Please fill in all game and line fields.");
             return;
         }
@@ -438,20 +530,24 @@ export default function AdminPage() {
         setError("");
 
         const { error } = await supabase.rpc("add_game_with_lines", {
-            p_week_number: week?.week_number,
+            p_week_number: selectedAdminWeek.week_number,
             p_league: league,
             p_away_team: awayTeam,
             p_home_team: homeTeam,
             p_away_spread: Number(awaySpread),
             p_home_spread: Number(homeSpread),
             p_total: Number(total),
-            p_game_time: gameTime ? new Date(gameTime).toISOString() : null,
+            p_game_time: gameTime
+                ? new Date(gameTime).toISOString()
+                : null,
         });
 
         if (error) {
             setError(error.message);
         } else {
-            setMessage(`${awayTeam} @ ${homeTeam} added.`);
+            setMessage(
+                `${awayTeam} @ ${homeTeam} added to Week ${selectedAdminWeek.week_number}.`
+            );
 
             setAwayTeam("");
             setHomeTeam("");
@@ -459,6 +555,8 @@ export default function AdminPage() {
             setHomeSpread("");
             setTotal("");
             setGameTime("");
+
+            await loadAdmin(selectedAdminWeek.id);
         }
 
         setWorking(false);
@@ -645,7 +743,9 @@ export default function AdminPage() {
     }
 
     async function importSelectedOdds() {
-        if (!week) return;
+        if (!selectedAdminWeek) return;
+
+        const adminWeek = selectedAdminWeek;
 
         const selected = oddsGames.filter((game) =>
             selectedOddsGames.includes(game.external_id)
@@ -675,7 +775,7 @@ export default function AdminPage() {
                 const { error } = await supabase.rpc(
                     "admin_import_odds_game",
                     {
-                        p_week_id: week.id,
+                        p_week_id: adminWeek.id,
                         p_external_id: game.external_id,
                         p_league: game.league,
                         p_away_team: game.away_team,
@@ -696,7 +796,9 @@ export default function AdminPage() {
                 imported++;
             }
 
-            setMessage(`${imported} game(s) imported into Week ${week.week_number}.`);
+            setMessage(
+                `${imported} game(s) imported into Week ${adminWeek.week_number}.`
+            );
             setSelectedOddsGames([]);
         } catch (err) {
             setError(
@@ -710,9 +812,11 @@ export default function AdminPage() {
     }
 
     async function refreshImportedLines() {
-        if (!week) return;
+        if (!selectedAdminWeek) return;
 
-        if (week.status !== "setup") {
+        const adminWeek = selectedAdminWeek;
+
+        if (adminWeek.status !== "setup") {
             setError("Lines are frozen after the draft starts.");
             return;
         }
@@ -751,7 +855,7 @@ export default function AdminPage() {
                 await supabase
                     .from("games")
                     .select("id, away_team, home_team, league, external_id, game_time")
-                    .eq("week_id", week.id)
+                    .eq("week_id", adminWeek.id)
                     .order("game_time", { ascending: true });
 
             if (importedGameError) {
@@ -810,7 +914,7 @@ export default function AdminPage() {
                 const { error } = await supabase.rpc(
                     "admin_refresh_odds_game",
                     {
-                        p_week_id: week.id,
+                        p_week_id: adminWeek.id,
                         p_external_id: fresh.external_id,
                         p_away_spread: fresh.away_spread,
                         p_home_spread: fresh.home_spread,
@@ -841,7 +945,9 @@ export default function AdminPage() {
     }
 
     async function importAllFilteredOdds() {
-        if (!week) return;
+        if (!selectedAdminWeek) return;
+
+        const adminWeek = selectedAdminWeek;
 
         const importableGames = filteredOddsGames.filter(
             (game) =>
@@ -856,7 +962,7 @@ export default function AdminPage() {
         }
 
         const confirmed = window.confirm(
-            `Import all ${importableGames.length} currently filtered games into Week ${week.week_number}?`
+            `Import all ${importableGames.length} currently filtered games into Week ${adminWeek.week_number}?`
         );
 
         if (!confirmed) return;
@@ -873,7 +979,7 @@ export default function AdminPage() {
                 const { error } = await supabase.rpc(
                     "admin_import_odds_game",
                     {
-                        p_week_id: week.id,
+                        p_week_id: adminWeek.id,
                         p_external_id: game.external_id,
                         p_league: game.league,
                         p_away_team: game.away_team,
@@ -904,10 +1010,7 @@ export default function AdminPage() {
             }
 
             setMessage(
-                `${imported} game(s) imported` +
-                (skipped > 0
-                    ? `, ${skipped} duplicate(s) skipped.`
-                    : ".")
+                `${imported} game(s) imported into Week ${adminWeek.week_number}.`
             );
 
             await loadAdmin();
@@ -1012,7 +1115,7 @@ export default function AdminPage() {
     }
 
     async function adminSubmitParticipantPick() {
-        if (!week) return;
+        if (!selectedAdminWeek) return;
 
         if (!adminPickParticipantId) {
             setError("Choose a participant.");
@@ -1042,8 +1145,13 @@ export default function AdminPage() {
         const participantName =
             participant.participants?.name ?? "Participant";
 
+        const isHistorical =
+            selectedAdminWeek.status !== "drafting";
+
         const confirmed = window.confirm(
-            `Lock ${selection.display_name} for ${participantName}?`
+            isHistorical
+                ? `Change Week ${selectedAdminWeek.week_number} pick for ${participantName} to ${selection.display_name}?`
+                : `Lock ${selection.display_name} for ${participantName}?`
         );
 
         if (!confirmed) return;
@@ -1053,32 +1161,51 @@ export default function AdminPage() {
         setMessage("");
 
         try {
-            const { error } = await supabase.rpc(
-                "admin_lock_pick_for_participant",
-                {
-                    p_week_id: week.id,
-                    p_participant_id: Number(adminPickParticipantId),
-                    p_selection_id: Number(adminPickSelectionId),
-                }
-            );
+            let rpcError;
 
-            if (error) {
-                throw new Error(error.message);
+            if (isHistorical) {
+                const { error } = await supabase.rpc(
+                    "admin_correct_participant_pick",
+                    {
+                        p_week_id: selectedAdminWeek.id,
+                        p_participant_id: Number(adminPickParticipantId),
+                        p_selection_id: Number(adminPickSelectionId),
+                    }
+                );
+
+                rpcError = error;
+            } else {
+                const { error } = await supabase.rpc(
+                    "admin_lock_pick_for_participant",
+                    {
+                        p_week_id: selectedAdminWeek.id,
+                        p_participant_id: Number(adminPickParticipantId),
+                        p_selection_id: Number(adminPickSelectionId),
+                    }
+                );
+
+                rpcError = error;
+            }
+
+            if (rpcError) {
+                throw new Error(rpcError.message);
             }
 
             setMessage(
-                `${selection.display_name} locked for ${participantName}.`
+                isHistorical
+                    ? `Week ${selectedAdminWeek.week_number} pick updated for ${participantName}. Enter the correct result below.`
+                    : `${selection.display_name} locked for ${participantName}.`
             );
 
             setAdminPickParticipantId("");
             setAdminPickSelectionId("");
 
-            await loadAdmin();
+            await loadAdmin(selectedAdminWeek.id);
         } catch (err) {
             setError(
                 err instanceof Error
                     ? err.message
-                    : "Unable to lock participant pick."
+                    : "Unable to update participant pick."
             );
         } finally {
             setAdminPickSubmitting(false);
@@ -1177,7 +1304,8 @@ export default function AdminPage() {
                     </h1>
 
                     <p className="mt-1 text-sm text-zinc-400">
-                        Week {week?.week_number} controls
+                        Editing Week {selectedAdminWeek?.week_number}
+                        {selectedAdminWeek?.id === week?.id ? " - LIVE" : ""}
                     </p>
                 </header>
 
@@ -1290,6 +1418,33 @@ export default function AdminPage() {
 
                 <section className="mb-5 rounded-3xl border border-zinc-800 bg-zinc-900 p-5">
                     <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">
+                        Admin Week
+                    </p>
+
+                    <p className="mt-2 text-sm text-zinc-400">
+                        Choose a week to edit. This does not change the public active week.
+                    </p>
+
+                    <select
+                        value={adminWeekId ?? ""}
+                        onChange={(e) => {
+                            const id = Number(e.target.value);
+                            setAdminWeekId(id);
+                            loadAdmin(id);
+                        }}
+                        className="mt-4 w-full rounded-2xl border border-zinc-700 bg-zinc-950 p-3 text-white"
+                    >
+                        {weeks.map((item) => (
+                            <option key={item.id} value={item.id}>
+                                Week {item.week_number}
+                                {item.is_active ? " - LIVE" : ""}
+                            </option>
+                        ))}
+                    </select>
+                </section>
+
+                <section className="mb-5 rounded-3xl border border-zinc-800 bg-zinc-900 p-5">
+                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">
                         Week Management
                     </p>
 
@@ -1343,11 +1498,11 @@ export default function AdminPage() {
                     <div className="mt-3 flex items-center justify-between">
                         <div>
                             <p className="text-xl font-bold">
-                                Week {week?.week_number}
+                                Week {selectedAdminWeek?.week_number}
                             </p>
 
                             <p className="mt-1 text-sm text-zinc-400">
-                                Status: {week?.status.toUpperCase()}
+                                Status: {selectedAdminWeek?.status.toUpperCase()}
                             </p>
                         </div>
 
@@ -1356,7 +1511,7 @@ export default function AdminPage() {
                         </span>
                     </div>
 
-                    {week?.status === "setup" && (
+                    {selectedAdminWeek?.status !== "setup" && (
                         <button
                             onClick={startDraft}
                             disabled={working}
@@ -1745,11 +1900,16 @@ export default function AdminPage() {
                                 </option>
 
                                 {adminPickParticipants
-                                    .filter(
-                                        (participant) =>
+                                    .filter((participant) => {
+                                        if (selectedAdminWeek?.status !== "drafting") {
+                                            return true;
+                                        }
+
+                                        return (
                                             participant.status === "on_clock" ||
                                             participant.status === "skipped"
-                                    )
+                                        );
+                                    })
                                     .map((participant) => (
                                         <option
                                             key={participant.participant_id}
@@ -1800,20 +1960,22 @@ export default function AdminPage() {
                             onClick={adminSubmitParticipantPick}
                             disabled={
                                 adminPickSubmitting ||
-                                week?.status !== "drafting" ||
+                                !selectedAdminWeek ||
                                 !adminPickParticipantId ||
                                 !adminPickSelectionId
                             }
                             className="w-full rounded-2xl bg-emerald-500 py-3 font-bold text-black disabled:opacity-40"
                         >
                             {adminPickSubmitting
-                                ? "Locking Pick..."
-                                : "Lock Pick for Participant"}
+                                ? "Saving Pick..."
+                                : selectedAdminWeek?.status === "drafting"
+                                    ? "Lock Pick for Participant"
+                                    : "Update Historical Pick"}
                         </button>
 
-                        {week?.status !== "drafting" && (
-                            <p className="text-center text-xs text-zinc-500">
-                                Commissioner pick entry becomes available once the draft starts.
+                        {selectedAdminWeek?.status !== "drafting" && (
+                            <p className="text-center text-xs text-yellow-400">
+                                Historical correction mode. Changing a pick will clear its old result so you can enter the correct result below.
                             </p>
                         )}
                     </div>
