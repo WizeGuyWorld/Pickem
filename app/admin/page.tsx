@@ -1498,28 +1498,30 @@ export default function AdminPage() {
                     <div className="mt-3 flex items-center justify-between">
                         <div>
                             <p className="text-xl font-bold">
-                                Week {selectedAdminWeek?.week_number}
+                                Week {week?.week_number}
                             </p>
 
                             <p className="mt-1 text-sm text-zinc-400">
-                                Status: {selectedAdminWeek?.status.toUpperCase()}
+                                Status: {week?.status?.toUpperCase()}
                             </p>
                         </div>
 
                         <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-400">
-                            {week?.status.toUpperCase()}
+                            {week?.status?.toUpperCase()}
                         </span>
                     </div>
 
-                    {selectedAdminWeek?.status !== "setup" && (
-                        <button
-                            onClick={startDraft}
-                            disabled={working}
-                            className="mt-5 w-full rounded-2xl bg-emerald-500 py-3 font-bold text-black disabled:opacity-50"
-                        >
-                            Start Draft
-                        </button>
-                    )}
+                    <button
+                        onClick={startDraft}
+                        disabled={working || week?.status !== "setup"}
+                        className="mt-5 w-full rounded-2xl bg-emerald-500 py-3 font-bold text-black disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                        {working
+                            ? "Working..."
+                            : week?.status === "setup"
+                                ? "Start Week 6 Draft / Clock"
+                                : "Draft Already Started"}
+                    </button>
 
                     {week?.status === "drafting" && (
                         <button
@@ -1546,7 +1548,6 @@ export default function AdminPage() {
                             Start Next Week Setup
                         </button>
                     )}
-
                 </section>
 
                 <section className="mb-5 rounded-3xl border border-zinc-800 bg-zinc-900 p-5">
