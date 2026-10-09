@@ -54,9 +54,18 @@ export default function Home() {
         useState<CurrentParticipant | null>(null);
     const [weekId, setWeekId] = useState<number | null>(null);
     const [weekNumber, setWeekNumber] = useState<number | null>(null);
+    const [now, setNow] = useState(Date.now());
 
     useEffect(() => {
         loadDraft();
+    }, []);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setNow(Date.now());
+        }, 15000);
+
+        return () => clearInterval(interval);
     }, []);
 
     async function loadDraft() {
@@ -284,19 +293,27 @@ export default function Home() {
         }
 
         if (filter === "Available") {
-            return games.filter((game) =>
-                game.selections.some(
+            return games.filter((game) => {
+                const gameStarted =
+                    !!game.game_time &&
+                    new Date(game.game_time).getTime() <= now;
+
+                if (gameStarted) {
+                    return false;
+                }
+
+                return game.selections.some(
                     (selection) =>
                         !picks.some(
                             (pick) =>
                                 pick.selection_id === selection.id
                         )
-                )
-            );
+                );
+            });
         }
 
         return games;
-    }, [games, picks, filter]);
+    }, [games, picks, filter, now]);
 
     function getTakenBy(selectionId: number) {
         const pick = picks.find(
@@ -461,77 +478,97 @@ export default function Home() {
                             </div>
 
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                                {dayGames.map((game) => (
-                                    <article
-                                        key={game.id}
-                                        className="rounded-3xl border border-zinc-800 bg-zinc-900 p-4"
-                                    >
-                                        <div className="mb-4">
-                                            <div className="flex items-center justify-between gap-3">
-                                                <span className="rounded-full bg-zinc-800 px-2 py-1 text-[10px] font-bold tracking-widest text-zinc-400">
-                                                    {game.league}
-                                                </span>
+                                {dayGames.map((game) => {
+                                    const gameStarted =
+                                        !!game.game_time &&
+                                        new Date(game.game_time).getTime() <= now;
 
-                                                <span className="text-xs font-semibold text-zinc-400">
-                                                    {game.game_time
-                                                        ? new Date(game.game_time).toLocaleTimeString([], {
-                                                            hour: "numeric",
-                                                            minute: "2-digit",
-                                                        })
-                                                        : "Time TBD"}
-                                                </span>
+                                    return (
+                                        <article
+                                            key={game.id}
+                                            className={`rounded-3xl border border-zinc-800 bg-zinc-900 p-4 ${gameStarted ? "opacity-60" : ""
+                                                }`}
+                                        >
+                                            <div className="mb-4">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span className="rounded-full bg-zinc-800 px-2 py-1 text-[10px] font-bold tracking-widest text-zinc-400">
+                                                        {game.league}
+                                                    </span>
+
+                                                    <span className="text-xs font-semibold text-zinc-400">
+                                                        {game.game_time
+                                                            ? new Date(game.game_time).toLocaleTimeString([], {
+                                                                hour: "numeric",
+                                                                minute: "2-digit",
+                                                            })
+                                                            : "Time TBD"}
+                                                    </span>
+                                                </div>
+
+                                                <h3 className="mt-3 text-lg font-bold">
+                                                    {game.away_team} @ {game.home_team}
+                                                </h3>
                                             </div>
 
-                                            <h3 className="mt-3 text-lg font-bold">
-                                                {game.away_team} @ {game.home_team}
-                                            </h3>
-                                        </div>
+                                            {gameStarted && (
+                                                <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-center text-xs font-bold text-red-400">
+                                                    GAME STARTED - PICKS CLOSED
+                                                </div>
+                                            )}
 
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {game.selections.map((selection) => {
-                                                const takenBy = getTakenBy(selection.id);
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {game.selections.map((selection) => {
+                                                    const takenBy = getTakenBy(selection.id);
 
-                                                return (
-                                                    <button
-                                                        key={selection.id}
-                                                        onClick={() => submitPick(selection)}
-                                                        disabled={
-                                                            Boolean(takenBy) ||
-                                                            submittingPick ||
-                                                            !canMakePick
-                                                        }
-                                                        className={`min-h-20 rounded-2xl border p-3 text-left ${takenBy
-                                                                ? "cursor-not-allowed border-zinc-800 bg-zinc-950 text-zinc-600"
-                                                                : "border-zinc-700 bg-zinc-800 text-white hover:border-emerald-500"
-                                                            }`}
-                                                    >
-                                                        <p className="font-bold">
-                                                            {selection.display_name}
-                                                        </p>
+                                                    return (
+                                                        <button
+                                                            key={selection.id}
+                                                            onClick={() => submitPick(selection)}
+                                                            disabled={
+                                                                gameStarted ||
+                                                                Boolean(takenBy) ||
+                                                                submittingPick ||
+                                                                !canMakePick
+                                                            }
+                                                            className={`min-h-20 rounded-2xl border p-3 text-left ${gameStarted
+                                                                    ? "cursor-not-allowed border-zinc-800 bg-zinc-950 text-zinc-600"
+                                                                    : takenBy
+                                                                        ? "cursor-not-allowed border-zinc-800 bg-zinc-950 text-zinc-600"
+                                                                        : "border-zinc-700 bg-zinc-800 text-white hover:border-emerald-500"
+                                                                }`}
+                                                        >
+                                                            <p className="font-bold">
+                                                                {selection.display_name}
+                                                            </p>
 
-                                                        {takenBy ? (
-                                                            <p className="mt-1 text-xs text-zinc-600">
-                                                                {takenBy !== "Taken"
-                                                                    ? `Taken by ${takenBy}`
-                                                                    : "Taken"}
-                                                            </p>
-                                                        ) : canMakePick ? (
-                                                            <p className="mt-1 text-xs text-emerald-400">
-                                                                {canMakeMakeupPick
-                                                                    ? "Tap for makeup pick"
-                                                                    : "Tap to select"}
-                                                            </p>
-                                                        ) : (
-                                                            <p className="mt-1 text-xs text-zinc-500">
-                                                                Available
-                                                            </p>
-                                                        )}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </article>
-                                ))}
+                                                            {gameStarted ? (
+                                                                <p className="mt-1 text-xs font-bold text-red-400">
+                                                                    Closed
+                                                                </p>
+                                                            ) : takenBy ? (
+                                                                <p className="mt-1 text-xs text-zinc-600">
+                                                                    {takenBy !== "Taken"
+                                                                        ? `Taken by ${takenBy}`
+                                                                        : "Taken"}
+                                                                </p>
+                                                            ) : canMakePick ? (
+                                                                <p className="mt-1 text-xs text-emerald-400">
+                                                                    {canMakeMakeupPick
+                                                                        ? "Tap for makeup pick"
+                                                                        : "Tap to select"}
+                                                                </p>
+                                                            ) : (
+                                                                <p className="mt-1 text-xs text-zinc-500">
+                                                                    Available
+                                                                </p>
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </article>
+                                    );
+                                })}
                             </div>
                         </section>
                     ))}
