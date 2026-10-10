@@ -1114,6 +1114,47 @@ export default function AdminPage() {
         setWorking(false);
     }
 
+    async function sendPasswordReset(
+        participantEmail: string | null,
+        participantName: string
+    ) {
+        if (!participantEmail) {
+            setError(
+                `${participantName} does not have an email address saved.`
+            );
+            return;
+        }
+
+        const confirmed = window.confirm(
+            `Send a password reset link to ${participantName}?\n\n${participantEmail}`
+        );
+
+        if (!confirmed) return;
+
+        setWorking(true);
+        setError("");
+        setMessage("");
+
+        const { error } =
+            await supabase.auth.resetPasswordForEmail(
+                participantEmail,
+                {
+                    redirectTo:
+                        `${window.location.origin}/reset-password`,
+                }
+            );
+
+        if (error) {
+            setError(error.message);
+        } else {
+            setMessage(
+                `Password reset email sent to ${participantEmail}.`
+            );
+        }
+
+        setWorking(false);
+    }
+
     async function adminSubmitParticipantPick() {
         if (!selectedAdminWeek) return;
 
@@ -1393,6 +1434,19 @@ export default function AdminPage() {
                                         className="rounded-xl bg-yellow-500/10 px-3 py-2 text-xs font-bold text-yellow-400 disabled:opacity-50"
                                     >
                                         Unlink
+                                    </button>
+
+                                    <button
+                                        onClick={() =>
+                                            sendPasswordReset(
+                                                participant.email,
+                                                participant.name
+                                            )
+                                        }
+                                        disabled={working}
+                                        className="rounded-xl bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-400 disabled:opacity-50"
+                                    >
+                                        Reset Password
                                     </button>
 
                                     {!participant.is_admin && (

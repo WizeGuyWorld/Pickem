@@ -497,9 +497,10 @@ export default function Home() {
 
                                                     <span className="text-xs font-semibold text-zinc-400">
                                                         {game.game_time
-                                                            ? new Date(game.game_time).toLocaleTimeString([], {
+                                                            ? new Date(game.game_time).toLocaleTimeString("en-US", {
                                                                 hour: "numeric",
                                                                 minute: "2-digit",
+                                                                timeZone: "America/Chicago",
                                                             })
                                                             : "Time TBD"}
                                                     </span>
