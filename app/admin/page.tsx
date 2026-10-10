@@ -1187,7 +1187,7 @@ export default function AdminPage() {
             participant.participants?.name ?? "Participant";
 
         const isHistorical =
-            selectedAdminWeek.status !== "drafting";
+            selectedAdminWeek.id !== week?.id;
 
         const confirmed = window.confirm(
             isHistorical
@@ -1956,7 +1956,7 @@ export default function AdminPage() {
 
                                 {adminPickParticipants
                                     .filter((participant) => {
-                                        if (selectedAdminWeek?.status !== "drafting") {
+                                        if (selectedAdminWeek?.id !== week?.id) {
                                             return true;
                                         }
 
@@ -2023,12 +2023,12 @@ export default function AdminPage() {
                         >
                             {adminPickSubmitting
                                 ? "Saving Pick..."
-                                : selectedAdminWeek?.status === "drafting"
+                                : selectedAdminWeek?.id === week?.id
                                     ? "Lock Pick for Participant"
                                     : "Update Historical Pick"}
                         </button>
 
-                        {selectedAdminWeek?.status !== "drafting" && (
+                        {selectedAdminWeek?.id !== week?.id && (
                             <p className="text-center text-xs text-yellow-400">
                                 Historical correction mode. Changing a pick will clear its old result so you can enter the correct result below.
                             </p>
