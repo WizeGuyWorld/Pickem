@@ -12,6 +12,7 @@ type BoardRow = {
     turn_status: string;
     selection_id: number | null;
     display_name: string | null;
+    pick_result: string | null;
 };
 
 export default function BoardPage() {
@@ -141,13 +142,28 @@ export default function BoardPage() {
                                     </p>
                                 </div>
 
-                                <span
-                                    className={`rounded-full border px-2 py-1 text-[10px] font-bold ${statusStyle(
-                                        row.turn_status
-                                    )}`}
-                                >
-                                    {statusLabel(row.turn_status)}
-                                </span>
+                                <div className="text-right">
+                                    <span
+                                        className={`inline-block rounded-full border px-2 py-1 text-[10px] font-bold ${statusStyle(
+                                            row.turn_status
+                                        )}`}
+                                    >
+                                        {statusLabel(row.turn_status)}
+                                    </span>
+
+                                    {row.turn_status === "picked" && row.pick_result && (
+                                        <p
+                                            className={`mt-2 text-xs font-bold uppercase ${row.pick_result === "win"
+                                                    ? "text-emerald-400"
+                                                    : row.pick_result === "loss"
+                                                        ? "text-red-400"
+                                                        : "text-yellow-400"
+                                                }`}
+                                        >
+                                            {row.pick_result}
+                                        </p>
+                                    )}
+                                </div>
                             </div>
 
                             {row.display_name && (
