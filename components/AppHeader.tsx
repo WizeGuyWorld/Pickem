@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useMusic } from "@/components/MusicProvider";
 
 type Participant = {
   name: string;
@@ -11,7 +12,8 @@ type Participant = {
 
 export default function AppHeader() {
   const router = useRouter();
-  const [participant, setParticipant] = useState<Participant | null>(null);
+    const [participant, setParticipant] = useState<Participant | null>(null);
+    const { playing, toggleMusic } = useMusic();
 
   useEffect(() => {
     loadUser();
@@ -58,7 +60,18 @@ export default function AppHeader() {
             Commissioner
           </p>
         )}
-      </div>
+          </div>
+
+          <button
+              type="button"
+              onClick={toggleMusic}
+              className={`rounded-xl px-3 py-2 text-xs font-bold ${playing
+                      ? "bg-emerald-500 text-black"
+                      : "bg-zinc-800 text-zinc-300"
+                  }`}
+          >
+              {playing ? "Music ON" : "Music OFF"}
+          </button>
 
       <button
         onClick={logout}
