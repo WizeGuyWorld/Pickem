@@ -1573,7 +1573,7 @@ export default function AdminPage() {
                         {working
                             ? "Working..."
                             : week?.status === "setup"
-                                ? "Start Week 6 Draft / Clock"
+                                ? `Start Week ${week?.week_number} Draft / Clock`
                                 : "Draft Already Started"}
                     </button>
 
