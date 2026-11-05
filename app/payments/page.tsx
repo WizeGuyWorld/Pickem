@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { supabase } from "@/lib/supabase";
+import Link from "next/link";
 
 type PaymentType = "dues" | "penalty";
 type PaymentMethod = "cashapp" | "zelle" | "paypal";
@@ -521,6 +522,37 @@ export default function PaymentsPage() {
                     )}
                 </div>
             </div>
+            <nav className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur">
+                <div className="mx-auto grid max-w-md grid-cols-4">
+                    <Link
+                        href="/"
+                        className="py-4 text-center text-xs font-bold text-zinc-500"
+                    >
+                        Draft
+                    </Link>
+
+                    <Link
+                        href="/board"
+                        className="py-4 text-center text-xs font-bold text-emerald-400"
+                    >
+                        Board
+                    </Link>
+
+                    <Link
+                        href="/standings"
+                        className="py-4 text-center text-xs font-bold text-zinc-500"
+                    >
+                        Standings
+                    </Link>
+
+                    <Link
+                        href="/my-pick"
+                        className="py-4 text-center text-xs font-bold text-zinc-500"
+                    >
+                        My Pick
+                    </Link>
+                </div>
+            </nav>
         </main>
     );
 }
