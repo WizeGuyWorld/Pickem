@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useMusic } from "@/components/MusicProvider";
+import Link from "next/link";
 
 type Participant = {
   name: string;
@@ -72,6 +73,13 @@ export default function AppHeader() {
           >
               {playing ? "Music ON" : "Music OFF"}
           </button>
+
+          <Link
+              href="/payments"
+              className="rounded-xl bg-red-600 px-3 py-2 text-sm font-black text-white hover:bg-red-500"
+          >
+              Payments
+          </Link>
 
       <button
         onClick={logout}

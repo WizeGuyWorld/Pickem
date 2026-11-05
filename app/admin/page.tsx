@@ -90,6 +90,17 @@ type AdminPickSelection = {
     game_time: string | null;
 };
 
+type ParticipantPayment = {
+    id: number;
+    participant_id: number;
+    participant_name: string;
+    payment_type: "dues" | "penalty";
+    amount: number;
+    payment_method: string | null;
+    status: "pending" | "paid" | "rejected";
+    submitted_at: string;
+};
+
 export default function AdminPage() {
     const [week, setWeek] = useState<Week | null>(null);
     const [turns, setTurns] = useState<Turn[]>([]);
@@ -119,6 +130,7 @@ export default function AdminPage() {
     const [inviteParticipantId, setInviteParticipantId] = useState("");
     const [inviteEmail, setInviteEmail] = useState("");
     const [inviteLoading, setInviteLoading] = useState(false);
+    const [participantPayments, setParticipantPayments] = useState<ParticipantPayment[]>([]);
     const [adminPickParticipants, setAdminPickParticipants] = useState<
         AdminPickParticipant[]
     >([]);
@@ -367,6 +379,71 @@ export default function AdminPage() {
 
             setLockedPicks(
                 (pickData as unknown as LockedPick[]) ?? []
+            );
+
+            const { data: paymentsData, error: paymentsError } = await supabase
+                .from("participant_payments")
+                .select(`
+        id,
+        participant_id,
+        payment_type,
+        amount,
+        payment_method,
+        status,
+        submitted_at
+    `)
+                .order("submitted_at", {
+                    ascending: false,
+                });
+
+            if (paymentsError) {
+                setError(paymentsError.message);
+                return;
+            }
+
+            const paymentParticipantIds = [
+                ...new Set(
+                    (paymentsData ?? []).map(
+                        (payment) => payment.participant_id
+                    )
+                ),
+            ];
+
+            let paymentParticipantMap = new Map<number, string>();
+
+            if (paymentParticipantIds.length > 0) {
+                const {
+                    data: paymentParticipants,
+                    error: paymentParticipantsError,
+                } = await supabase
+                    .from("participants")
+                    .select("id, name")
+                    .in("id", paymentParticipantIds);
+
+                if (paymentParticipantsError) {
+                    setError(paymentParticipantsError.message);
+                    return;
+                }
+
+                paymentParticipantMap = new Map(
+                    (paymentParticipants ?? []).map(
+                        (participant) => [
+                            participant.id,
+                            participant.name,
+                        ]
+                    )
+                );
+            }
+
+            setParticipantPayments(
+                (paymentsData ?? []).map((payment) => ({
+                    ...payment,
+                    amount: Number(payment.amount),
+                    participant_name:
+                        paymentParticipantMap.get(
+                            payment.participant_id
+                        ) ?? "Unknown Participant",
+                }))
             );
 
             // -----------------------------------------
@@ -1253,6 +1330,45 @@ export default function AdminPage() {
         }
     }
 
+    async function updatePaymentStatus(
+        paymentId: number,
+        status: "paid" | "rejected"
+    ) {
+        const confirmed = window.confirm(
+            status === "paid"
+                ? "Mark this payment as verified and paid?"
+                : "Reject this payment submission?"
+        );
+
+        if (!confirmed) return;
+
+        setWorking(true);
+        setError("");
+
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
+        const { error } = await supabase
+            .from("participant_payments")
+            .update({
+                status,
+                verified_at: new Date().toISOString(),
+                verified_by: user?.id ?? null,
+            })
+            .eq("id", paymentId);
+
+        if (error) {
+            setError(error.message);
+            setWorking(false);
+            return;
+        }
+
+        await loadAdmin(adminWeekId ?? undefined);
+
+        setWorking(false);
+    }
+
     async function deleteParticipantLogin(
         participantId: number,
         participantName: string
@@ -2119,6 +2235,102 @@ export default function AdminPage() {
                             </div>
                         ))}
                     </div>
+                </section>
+
+                <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <h2 className="text-xl font-black">
+                                Participant Payments
+                            </h2>
+
+                            <p className="mt-1 text-sm text-zinc-400">
+                                Verify participation dues and penalty payments.
+                            </p>
+                        </div>
+                    </div>
+
+                    {participantPayments.length === 0 ? (
+                        <p className="mt-4 text-sm text-zinc-500">
+                            No payment submissions yet.
+                        </p>
+                    ) : (
+                        <div className="mt-5 space-y-3">
+                            {participantPayments.map((payment) => (
+                                <div
+                                    key={payment.id}
+                                    className="rounded-xl border border-zinc-800 bg-zinc-950 p-4"
+                                >
+                                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                                        <div>
+                                            <p className="font-black">
+                                                {payment.participant_name}
+                                            </p>
+
+                                            <p className="mt-1 text-sm text-zinc-400">
+                                                {payment.payment_type === "dues"
+                                                    ? "Participation Dues"
+                                                    : "Penalty Payment"}
+                                            </p>
+
+                                            <p className="mt-1 text-xs text-zinc-500">
+                                                {payment.payment_method?.toUpperCase() ?? "Unknown Method"}
+                                            </p>
+                                        </div>
+
+                                        <div className="sm:text-right">
+                                            <p className="text-xl font-black">
+                                                ${payment.amount.toFixed(2)}
+                                            </p>
+
+                                            <p
+                                                className={`mt-1 text-xs font-black uppercase ${payment.status === "paid"
+                                                        ? "text-emerald-400"
+                                                        : payment.status === "rejected"
+                                                            ? "text-red-400"
+                                                            : "text-yellow-400"
+                                                    }`}
+                                            >
+                                                {payment.status}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {payment.status === "pending" && (
+                                        <div className="mt-4 grid grid-cols-2 gap-2">
+                                            <button
+                                                type="button"
+                                                disabled={working}
+                                                onClick={() =>
+                                                    updatePaymentStatus(
+                                                        payment.id,
+                                                        "paid"
+                                                    )
+                                                }
+                                                className="rounded-xl bg-emerald-500 px-4 py-3 font-bold text-black disabled:opacity-50"
+                                            >
+                                                Mark Paid
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                disabled={working}
+                                                onClick={() =>
+                                                    updatePaymentStatus(
+                                                        payment.id,
+                                                        "rejected"
+                                                    )
+                                                }
+                                                className="rounded-xl border border-red-700 bg-red-950/30 px-4 py-3 font-bold text-red-300 disabled:opacity-50"
+                                            >
+                                                Reject
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </section>
 
                 <section className="mb-5 rounded-3xl border border-zinc-800 bg-zinc-900 p-5">
